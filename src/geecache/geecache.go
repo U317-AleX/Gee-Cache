@@ -33,6 +33,7 @@ type Group struct {
 	name string
 	getter Getter // method defining how to get data from date source, implemented by user.
 	mainCache cache // underlying object of cache.
+	peers PeerPicker
 }
 
 var (
@@ -77,7 +78,25 @@ func (g *Group) Get(key string) (ByteView, error) {
 	return g.load(key)
 }
 
+// RegisterPeers register a PeerPicker for choosed remote peer
+func (g *Group) RegisterPeers(peers PeerPicker) {
+	if g.peers != nil {
+		panic("RegisterPeers called more than once")
+	}
+	g.peers = peers
+}
+
+// load picks a peer and try to get value from it
+// if anything went wrong, load locally
 func (g *Group) load(key string) (value ByteView, err error) {
+	if g.getter != nil {
+		if peer, ok := g.peers.PickPeer(key); ok {
+			if value, err = g.getFromPeer(peer, key); err == nil {
+				return value, nil
+			}
+			log.Println("[GeeCache] Failed to get from peer", err)
+		}
+	}
 	return g.getLocally(key)
 }
 
@@ -91,6 +110,14 @@ func (g *Group) getLocally(key string) (ByteView, error) {
 	// push new value into cache
 	g.populateCache(key, value)
 	return value, nil
+}
+
+func (g *Group) getFromPeer(peer PeerGetter, key string) (ByteView, error) {
+	bytes, err := peer.Get(g.name, key)
+	if err != nil {
+		return ByteView{}, err
+	}
+	return ByteView{b: bytes}, nil
 }
 
 func (g *Group) populateCache(key string, value ByteView) {
