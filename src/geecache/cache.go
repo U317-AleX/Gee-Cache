@@ -3,7 +3,7 @@ package geecache
 import (
 	"sync"
 
-	"github.com/U317-AleX/Gee-KVS/lru"
+	"github.com/U317-AleX/Gee-KVS/src/lru"
 )
 
 // cache is a encapsulation of lru.Cache for implementing concurrency feature

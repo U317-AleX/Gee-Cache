@@ -9,7 +9,9 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/U317-AleX/Gee-KVS/consistenthash"
+	"github.com/U317-AleX/Gee-KVS/src/consistenthash"
+	pb "github.com/U317-AleX/Gee-KVS/src/geecachepb"
+	"github.com/segmentio/encoding/proto"
 )
 
 const defaultBasePath = "/_geecache/"
@@ -19,17 +21,17 @@ const defaultReplicas = 50
 // it's the server instance of a peer actually
 type HTTPPool struct {
 	// this peer's base URL, e.g. "http://example.net:8000"
-	self string // self is the address of this peer
-	basePath string // basePath is the prefix of a peer's URL
-	mu sync.Mutex // guards peers and httpGetters
-	peers *consistenthash.Map // Map offers interface Get to pick a peer for a key
+	self       string                 // self is the address of this peer
+	basePath   string                 // basePath is the prefix of a peer's URL
+	mu         sync.Mutex             // guards peers and httpGetters
+	peers      *consistenthash.Map    // Map offers interface Get to pick a peer for a key
 	httpGetter map[string]*httpGetter // map peer names to it's PeerGetter (httpGetter)
 }
 
 // NewHTTPPool initializes an HTTP pool of peers.
 func NewHTTPPool(self string) *HTTPPool {
 	return &HTTPPool{
-		self: self,
+		self:     self,
 		basePath: defaultBasePath,
 	}
 }
@@ -57,7 +59,7 @@ func (p *HTTPPool) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	group := GetGroup(groupName)
 	if group == nil {
-		http.Error(w, "no such group: " + groupName, http.StatusNotFound)
+		http.Error(w, "no such group: "+groupName, http.StatusNotFound)
 		return
 	}
 
@@ -67,8 +69,14 @@ func (p *HTTPPool) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	body, err := proto.Marshal(&pb.Response{Value: view.ByteSlice()})
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
 	w.Header().Set("Content-Type", "application/octet-stream")
-	w.Write(view.ByteSlice())
+	w.Write(body)
 }
 
 // Set updates the pool's list of peers.
@@ -91,7 +99,7 @@ func (p *HTTPPool) Set(peers ...string) {
 func (p *HTTPPool) PickPeer(key string) (PeerGetter, bool) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	// return nil, false while peer == p.self 
+	// return nil, false while peer == p.self
 	// to avoid call storm (call loop between group.Get and group.load)
 	if peer := p.peers.Get(key); peer != "" && peer != p.self {
 		p.Log("Pick peer %s", peer)
@@ -106,31 +114,33 @@ type httpGetter struct {
 }
 
 // Get gets value from a certain peer
-func (h *httpGetter) Get(group string, key string) ([]byte, error) {
+func (h *httpGetter) Get(in *pb.Request, out *pb.Response) error {
 	// /<basePath>/<groupname>/<key> required
 	u := fmt.Sprintf(
-		"%v%v%v",
+		"%v%v/%v",
 		h.baseURL,
-		url.QueryEscape(group),
-		url.QueryEscape(key),
+		url.QueryEscape(in.GetGroup()),
+		url.QueryEscape(in.GetKey()),
 	)
-	// Get response from peer
 	res, err := http.Get(u)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	defer res.Body.Close()
 
 	if res.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("server returned: %v", res.Status)
+		return fmt.Errorf("server returned: %v", res.Status)
 	}
 
 	bytes, err := io.ReadAll(res.Body)
 	if err != nil {
-		return nil, fmt.Errorf("reading response body: %v", err)
+		return fmt.Errorf("reading response body: %v", err)
 	}
 
-	return bytes, nil
+	if err = proto.Unmarshal(bytes, out); err != nil {
+		return fmt.Errorf("decoding response body: %v", err)
+	}
+	return nil
 }
 
-var _PeerGetter = (*httpGetter)(nil)
+var _ PeerGetter = (*httpGetter)(nil)

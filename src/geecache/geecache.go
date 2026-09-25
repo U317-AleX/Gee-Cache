@@ -5,7 +5,8 @@ import (
 	"log"
 	"sync"
 
-	"github.com/U317-AleX/Gee-KVS/singleflight"
+	"github.com/U317-AleX/Gee-KVS/src/singleflight"
+	pb "github.com/U317-AleX/Gee-KVS/src/geecachepb"
 )
 
 // this file contains the main structure of GeeCache,
@@ -127,11 +128,16 @@ func (g *Group) getLocally(key string) (ByteView, error) {
 }
 
 func (g *Group) getFromPeer(peer PeerGetter, key string) (ByteView, error) {
-	bytes, err := peer.Get(g.name, key)
+	req := &pb.Request{
+		Group: g.name,
+		Key:   key,
+	}
+	res := &pb.Response{}
+	err := peer.Get(req, res)
 	if err != nil {
 		return ByteView{}, err
 	}
-	return ByteView{b: bytes}, nil
+	return ByteView{b: res.Value}, nil
 }
 
 func (g *Group) populateCache(key string, value ByteView) {

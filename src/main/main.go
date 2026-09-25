@@ -6,7 +6,7 @@ import (
 	"log"
 	"net/http"
 
-	"github.com/U317-AleX/Gee-KVS/geecache"
+	"github.com/U317-AleX/Gee-KVS/src/geecache"
 )
 
 var db = map[string]string {
