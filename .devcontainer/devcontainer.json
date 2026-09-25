@@ -6,8 +6,7 @@
         "--security-opt",
         "seccomp=unconfined"
     ],
-    
-    "environment": {
+    "containerEnv": {
         "HTTP_PROXY": "http://host.docker.internal:7890",
         "HTTPS_PROXY": "http://host.docker.internal:7890",
         "ALL_PROXY": "socks5://host.docker.internal:7890"
