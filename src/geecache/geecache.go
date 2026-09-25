@@ -89,7 +89,7 @@ func (g *Group) RegisterPeers(peers PeerPicker) {
 // load picks a peer and try to get value from it
 // if anything went wrong, load locally
 func (g *Group) load(key string) (value ByteView, err error) {
-	if g.getter != nil {
+	if g.peers != nil {
 		if peer, ok := g.peers.PickPeer(key); ok {
 			if value, err = g.getFromPeer(peer, key); err == nil {
 				return value, nil
